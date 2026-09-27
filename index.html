@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comfy Recipes</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <h1>Comfy Recipes</h1>
+        <div class="header-actions">
+          <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <div id="error-container"></div>
+
+        <!-- Home Screen -->
+        <div id="screen-home" class="screen active">
+          <div class="card">
+            <h2 class="card-title">Recipes</h2>
+            <div id="recipe-grid" class="recipe-grid">
+              <!-- Recipes loaded dynamically -->
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Recent Results</h2>
+            <div id="history-grid" class="history-grid">
+              <!-- History loaded dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Connect/Settings Screen -->
+        <div id="screen-connect" class="screen">
+          <div class="card">
+            <h2 class="card-title">Connect to ComfyUI</h2>
+            
+            <div class="form-group">
+              <label class="form-label" for="server-address">Server Address</label>
+              <input 
+                type="text" 
+                id="server-address" 
+                class="form-input" 
+                placeholder="http://hades:8188"
+                value="http://hades:8188"
+              />
+            </div>
+
+            <button id="test-connection-btn" class="btn btn-primary">
+              Test Connection
+            </button>
+
+            <ul id="connection-status" class="status-list" style="margin-top: 20px;">
+              <!-- Status items rendered dynamically -->
+            </ul>
+
+            <div id="fix-instructions" class="fix-instructions hidden">
+              <!-- Fix instructions rendered dynamically -->
+            </div>
+
+            <div style="margin-top: 20px;">
+              <button id="back-to-home" class="btn btn-secondary">Back to Home</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Face Swap Screen -->
+        <div id="screen-face-swap" class="screen">
+          <div class="card">
+            <h2 class="card-title">Face Swap</h2>
+
+            <div class="consent-notice">
+              ⚠️ Only use photos of people who have given their consent.
+            </div>
+
+            <div class="face-swap-layout">
+              <div>
+                <label class="form-label">Face from (source)</label>
+                <div id="dropzone-source" class="image-dropzone">
+                  <div class="dropzone-label">
+                    <div class="icon">📷</div>
+                    <div>Click to select image</div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label class="form-label">Put onto (target)</label>
+                <div id="dropzone-target" class="image-dropzone">
+                  <div class="dropzone-label">
+                    <div class="icon">🖼️</div>
+                    <div>Click to select image</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">Face Detail (Restore Strength)</span>
+                <span id="value-restore" class="slider-value">1.00</span>
+              </div>
+              <input type="range" id="slider-restore" class="slider" min="0.1" max="1" step="0.05" value="1" />
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-label">CodeFormer Weight (0=natural, 1=enhanced)</span>
+                <span id="value-codeformer" class="slider-value">0.50</span>
+              </div>
+              <input type="range" id="slider-codeformer" class="slider" min="0" max="1" step="0.05" value="0.5" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Which Face</label>
+              <select id="select-face" class="select-input">
+                <option value="0">Largest (default)</option>
+                <option value="1">Second largest</option>
+                <option value="2">Third largest</option>
+              </select>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+              <button id="go-btn" class="btn btn-primary" disabled>Go</button>
+              <button id="back-from-swap" class="btn btn-secondary">Back</button>
+            </div>
+
+            <div id="progress-container" class="progress-container hidden">
+              <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+              </div>
+              <div id="progress-text" class="progress-text">Starting...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Result Screen -->
+        <div id="screen-result" class="screen">
+          <div class="card">
+            <h2 class="card-title">Result</h2>
+
+            <div class="result-comparison">
+              <div class="result-image-container">
+                <h4>Before</h4>
+                <img id="result-before" class="result-image" src="" alt="Before" />
+              </div>
+              <div class="result-image-container">
+                <h4>After</h4>
+                <img id="result-after" class="result-image" src="" alt="After" />
+              </div>
+            </div>
+
+            <div class="result-actions">
+              <button id="save-result-btn" class="btn btn-primary">Save to Mac</button>
+              <button id="try-again-btn" class="btn btn-secondary">Try Again</button>
+              <button id="tweak-btn" class="btn btn-secondary">Tweak</button>
+              <button id="back-from-result" class="btn btn-secondary">Home</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
