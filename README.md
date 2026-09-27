@@ -94,14 +94,18 @@ Restart ComfyUI after installing custom nodes.
 
 ### Required Models
 
-| Model File | Folder | Download Link |
-|------------|--------|---------------|
-| `sd_xl_base_1.0.safetensors` | `ComfyUI/models/checkpoints/` | [HuggingFace - stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/sd_xl_base_1.0.safetensors) |
-| `sdxl_vae.safetensors` | `ComfyUI/models/vae/` | [HuggingFace - stabilityai/sdxl-vae](https://huggingface.co/stabilityai/sdxl-vae/blob/main/sdxl_vae.safetensors) |
-| `CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors` | `ComfyUI/models/clip_vision/` | [HuggingFace - h94/IP-Adapter (SDXL models)](https://huggingface.co/h94/IP-Adapter/blob/main/sdxl_models/image_encoder/model.safetensors) (rename to `CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors`) |
-| `ip-adapter-faceid-plusv2_sdxl.bin` | `ComfyUI/models/ipadapter/` | [HuggingFace - h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID/blob/main/ip-adapter-faceid-plusv2_sdxl.bin) |
-| `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` | `ComfyUI/models/loras/` | [HuggingFace - h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID/blob/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors) |
-| InsightFace `buffalo_l` | `ComfyUI/models/insightface/models/buffalo_l/` | Auto-downloaded on first use by IPAdapter FaceID, or manually from [InsightFace](https://github.com/deepinsight/insightface/tree/master/python-package#model-zoo) |
+| Model File | Folder | Download | Notes |
+|------------|--------|----------|-------|
+| `sd_xl_base_1.0.safetensors` | `checkpoints/` | [sd_xl_base_1.0.safetensors](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors) | |
+| `sdxl_vae.safetensors` | `vae/` | [sdxl_vae.safetensors](https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors) | |
+| `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors` | `clip_vision/` | [model.safetensors](https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors) | **Rename** downloaded file to `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors` |
+| `ip-adapter-faceid-plusv2_sdxl.bin` | `ipadapter/` | [ip-adapter-faceid-plusv2_sdxl.bin](https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl.bin) | |
+| `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` | `loras/` | [ip-adapter-faceid-plusv2_sdxl_lora.safetensors](https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors) | |
+| `buffalo_l/` (folder) | `insightface/models/` | Auto-downloaded on first use | Or download from [InsightFace model zoo](https://github.com/deepinsight/insightface/tree/master/python-package#model-zoo) |
+| `inswapper_128.onnx` | `insightface/` | [inswapper_128.onnx](https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx) | For ReActor |
+| `codeformer-v0.1.0.pth` | `facerestore_models/` | [codeformer-v0.1.0.pth](https://huggingface.co/datasets/facefusion/codeformer/resolve/main/codeformer-v0.1.0.pth) | For face restoration |
+
+All folders are relative to `ComfyUI/models/`.
 
 ### Summary
 

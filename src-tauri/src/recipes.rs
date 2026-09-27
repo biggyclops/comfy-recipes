@@ -3,7 +3,7 @@ use serde_json::json;
 
 pub const SDXL_CHECKPOINT: &str = "sd_xl_base_1.0.safetensors";
 pub const SDXL_VAE: &str = "sdxl_vae.safetensors";
-pub const CLIP_VISION_MODEL: &str = "CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors";
+pub const CLIP_VISION_MODEL: &str = "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors";
 pub const IPADAPTER_FACEID_MODEL: &str = "ip-adapter-faceid-plusv2_sdxl.bin";
 pub const IPADAPTER_FACEID_LORA: &str = "ip-adapter-faceid-plusv2_sdxl_lora.safetensors";
 pub const INSIGHTFACE_MODEL: &str = "buffalo_l";
@@ -359,7 +359,7 @@ pub fn get_fix_instructions(missing_nodes: &[String]) -> Vec<String> {
                     "Download IP-Adapter FaceID Plus V2 models:\n\
                      - ip-adapter-faceid-plusv2_sdxl.bin -> ComfyUI/models/ipadapter/\n\
                      - ip-adapter-faceid-plusv2_sdxl_lora.safetensors -> ComfyUI/models/loras/\n\
-                     - CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors -> ComfyUI/models/clip_vision/".to_string()
+                     - CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors -> ComfyUI/models/clip_vision/".to_string()
                 );
                 instructions.push(
                     "Download InsightFace buffalo_l model:\n\

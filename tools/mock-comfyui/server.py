@@ -307,7 +307,7 @@ async def handle_object_info(request):
         "CLIPVisionLoader": {
             "input": {
                 "required": {
-                    "clip_name": [["CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors", "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"], {}]
+                    "clip_name": [["CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors", "CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors"], {}]
                 }
             },
             "output": ["CLIP_VISION"],
