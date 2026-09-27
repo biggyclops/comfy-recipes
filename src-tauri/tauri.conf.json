@@ -40,10 +40,5 @@
       "minimumSystemVersion": "10.15"
     }
   },
-  "plugins": {
-    "fs": {
-      "all": true,
-      "scope": ["$APPDATA/**", "$DOWNLOAD/**", "$PICTURE/**", "$HOME/**"]
-    }
-  }
+  "plugins": {}
 }
