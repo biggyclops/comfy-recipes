@@ -16,6 +16,10 @@ interface HealthCheck {
   vram_free_gb: number | null;
   comfyui_version: string | null;
   missing_nodes: string[];
+  missing_face_hair_nodes: string[];
+  missing_face_hair_models: string[];
+  face_hair_available: boolean;
+  face_hair_unavailable_reason: string | null;
   error: string | null;
 }
 
@@ -35,6 +39,7 @@ interface HistoryEntry {
   result_image_path: string | null;
   settings_json: string;
   prompt_id: string | null;
+  swap_mode: string | null;
 }
 
 interface RunResult {
@@ -57,6 +62,7 @@ let sourceImageBase64: string | null = null;
 let targetImageBase64: string | null = null;
 let resultImageBase64: string | null = null;
 let isProcessing = false;
+let currentSwapMode: "face_only" | "face_hair" = "face_only";
 
 const screens = ["home", "connect", "face-swap", "result"];
 
@@ -164,7 +170,7 @@ function renderConnectionStatus() {
       html += `
         <li class="status-item">
           <span class="status-icon status-ok">✓</span>
-          <span>All required nodes found</span>
+          <span>Face only: Ready</span>
         </li>
       `;
     } else {
@@ -172,6 +178,22 @@ function renderConnectionStatus() {
         <li class="status-item">
           <span class="status-icon status-error">✗</span>
           <span>Missing nodes: ${healthStatus.missing_nodes.join(", ")}</span>
+        </li>
+      `;
+    }
+
+    if (healthStatus.face_hair_available) {
+      html += `
+        <li class="status-item">
+          <span class="status-icon status-ok">✓</span>
+          <span>Face + hair: Ready</span>
+        </li>
+      `;
+    } else {
+      html += `
+        <li class="status-item">
+          <span class="status-icon status-warning">!</span>
+          <span>Face + hair: Not available</span>
         </li>
       `;
     }
@@ -201,6 +223,49 @@ function renderConnectionStatus() {
       });
     } else {
       fixInstructions.classList.add("hidden");
+    }
+  }
+
+  updateFaceHairAvailability();
+}
+
+function updateFaceHairAvailability() {
+  const faceHairRadio = document.getElementById("mode-face-hair") as HTMLInputElement;
+  const faceHairLabel = document.getElementById("mode-face-hair-label");
+  const unavailableDiv = document.getElementById("face-hair-unavailable");
+
+  if (!faceHairRadio || !faceHairLabel || !unavailableDiv) return;
+
+  if (healthStatus && healthStatus.face_hair_available) {
+    faceHairRadio.disabled = false;
+    faceHairLabel.classList.remove("disabled");
+    unavailableDiv.classList.add("hidden");
+  } else {
+    faceHairRadio.disabled = true;
+    faceHairLabel.classList.add("disabled");
+    if (currentSwapMode === "face_hair") {
+      currentSwapMode = "face_only";
+      const faceOnlyRadio = document.querySelector('input[name="swap-mode"][value="face_only"]') as HTMLInputElement;
+      if (faceOnlyRadio) faceOnlyRadio.checked = true;
+      updateFaceHairOptionsVisibility();
+    }
+    if (healthStatus && healthStatus.face_hair_unavailable_reason) {
+      unavailableDiv.textContent = healthStatus.face_hair_unavailable_reason;
+      unavailableDiv.classList.remove("hidden");
+    } else {
+      unavailableDiv.textContent = "Check server connection to enable Face + hair mode";
+      unavailableDiv.classList.remove("hidden");
+    }
+  }
+}
+
+function updateFaceHairOptionsVisibility() {
+  const options = document.getElementById("face-hair-options");
+  if (options) {
+    if (currentSwapMode === "face_hair") {
+      options.classList.remove("hidden");
+    } else {
+      options.classList.add("hidden");
     }
   }
 }
@@ -249,9 +314,11 @@ async function loadHistory() {
               const base64 = await invoke<string>("read_image_file", {
                 path: entry.result_image_path,
               });
+              const modeBadge = entry.swap_mode === "face_hair" ? "F+H" : "F";
               return `
                 <div class="history-thumb" data-id="${entry.id}">
                   <img src="data:image/png;base64,${base64}" alt="Result">
+                  <span class="mode-badge">${modeBadge}</span>
                 </div>
               `;
             } catch {
@@ -361,13 +428,34 @@ async function runFaceSwap() {
   const faceIndex = (document.getElementById("select-face") as HTMLSelectElement)?.value || "0";
 
   try {
-    const result = await invoke<RunResult>("run_face_swap", {
-      sourceImageBase64,
-      targetImageBase64,
-      faceRestoreVisibility: restoreVisibility,
-      codeformerWeight,
-      inputFacesIndex: faceIndex,
-    });
+    let result: RunResult;
+
+    if (currentSwapMode === "face_hair") {
+      const blendEdges = parseFloat(
+        (document.getElementById("slider-blend") as HTMLInputElement)?.value || "0.5"
+      );
+      const seed = parseInt(
+        (document.getElementById("input-seed") as HTMLInputElement)?.value || "0"
+      );
+
+      result = await invoke<RunResult>("run_face_swap_hair", {
+        sourceImageBase64,
+        targetImageBase64,
+        blendEdges,
+        seed,
+        faceRestoreVisibility: restoreVisibility,
+        codeformerWeight,
+        inputFacesIndex: faceIndex,
+      });
+    } else {
+      result = await invoke<RunResult>("run_face_swap", {
+        sourceImageBase64,
+        targetImageBase64,
+        faceRestoreVisibility: restoreVisibility,
+        codeformerWeight,
+        inputFacesIndex: faceIndex,
+      });
+    }
 
     resultImageBase64 = result.result_image_base64;
 
@@ -482,6 +570,22 @@ function setupEventListeners() {
 
   setupSlider("slider-restore", "value-restore");
   setupSlider("slider-codeformer", "value-codeformer");
+  setupSlider("slider-blend", "value-blend");
+
+  document.querySelectorAll('input[name="swap-mode"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const target = e.target as HTMLInputElement;
+      currentSwapMode = target.value as "face_only" | "face_hair";
+      updateFaceHairOptionsVisibility();
+    });
+  });
+
+  document.getElementById("random-seed-btn")?.addEventListener("click", () => {
+    const seedInput = document.getElementById("input-seed") as HTMLInputElement;
+    if (seedInput) {
+      seedInput.value = Math.floor(Math.random() * 2147483647).toString();
+    }
+  });
 }
 
 async function init() {

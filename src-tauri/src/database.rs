@@ -16,6 +16,7 @@ pub struct HistoryEntry {
     pub result_image_path: Option<String>,
     pub settings_json: String,
     pub prompt_id: Option<String>,
+    pub swap_mode: Option<String>,
 }
 
 pub struct Database {
@@ -57,15 +58,38 @@ impl Database {
                 target_image_path TEXT,
                 result_image_path TEXT,
                 settings_json TEXT NOT NULL,
-                prompt_id TEXT
+                prompt_id TEXT,
+                swap_mode TEXT
             )",
             [],
         )
         .map_err(|e| e.to_string())?;
 
+        Self::run_migrations(&conn)?;
+
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    fn run_migrations(conn: &Connection) -> Result<(), String> {
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(history)")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if !columns.contains(&"swap_mode".to_string()) {
+            conn.execute(
+                "ALTER TABLE history ADD COLUMN swap_mode TEXT DEFAULT 'face_only'",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        Ok(())
     }
 
     pub fn add_entry(
@@ -76,14 +100,15 @@ impl Database {
         result_image_path: Option<&str>,
         settings: &serde_json::Value,
         prompt_id: Option<&str>,
+        swap_mode: Option<&str>,
     ) -> Result<i64, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let now: DateTime<Utc> = Utc::now();
         let settings_json = serde_json::to_string(settings).map_err(|e| e.to_string())?;
 
         conn.execute(
-            "INSERT INTO history (recipe, created_at, source_image_path, target_image_path, result_image_path, settings_json, prompt_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO history (recipe, created_at, source_image_path, target_image_path, result_image_path, settings_json, prompt_id, swap_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 recipe,
                 now.to_rfc3339(),
@@ -92,6 +117,7 @@ impl Database {
                 result_image_path,
                 settings_json,
                 prompt_id,
+                swap_mode,
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -114,7 +140,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, recipe, created_at, source_image_path, target_image_path, result_image_path, settings_json, prompt_id
+                "SELECT id, recipe, created_at, source_image_path, target_image_path, result_image_path, settings_json, prompt_id, swap_mode
                  FROM history ORDER BY created_at DESC LIMIT ?1",
             )
             .map_err(|e| e.to_string())?;
@@ -130,6 +156,7 @@ impl Database {
                     result_image_path: row.get(5)?,
                     settings_json: row.get(6)?,
                     prompt_id: row.get(7)?,
+                    swap_mode: row.get(8)?,
                 })
             })
             .map_err(|e| e.to_string())?
@@ -143,7 +170,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, recipe, created_at, source_image_path, target_image_path, result_image_path, settings_json, prompt_id
+                "SELECT id, recipe, created_at, source_image_path, target_image_path, result_image_path, settings_json, prompt_id, swap_mode
                  FROM history WHERE id = ?1",
             )
             .map_err(|e| e.to_string())?;
@@ -159,6 +186,7 @@ impl Database {
                     result_image_path: row.get(5)?,
                     settings_json: row.get(6)?,
                     prompt_id: row.get(7)?,
+                    swap_mode: row.get(8)?,
                 })
             })
             .ok();

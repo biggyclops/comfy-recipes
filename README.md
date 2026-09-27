@@ -4,13 +4,25 @@ A Mac desktop app for running ComfyUI face-swap workflows without touching nodes
 
 ## Features
 
-- **Face Swap**: Swap a face from one photo onto another using ReActor
+- **Face Swap (Face only)**: Swap a face from one photo onto another using ReActor (fast, ~3 seconds)
+- **Face Swap (Face + hair)**: Replace the whole head including hair, keeping the target's body, pose, and background (SDXL + IPAdapter, ~30-60 seconds)
 - **Simple UI**: No node graphs - just pick photos and adjust a few sliders
-- **History**: Last 50 results saved locally with settings, so you can repeat good results
+- **History**: Last 50 results saved locally with settings and mode, so you can repeat good results
 - **Privacy**: Everything stays on your home network - no accounts, telemetry, or cloud services
 
 ## Screenshots
 
+### v0.2 - Face + hair Mode
+| | |
+|:---:|:---:|
+| ![Health OK](docs/screenshots/v0.2-health-ok.png) | ![Face + hair Mode](docs/screenshots/v0.2-face-hair-mode.png) |
+| Health check with Face + hair ready | Face + hair controls (blend edges, seed) |
+| ![Progress](docs/screenshots/v0.2-face-hair-progress.png) | ![Result](docs/screenshots/v0.2-face-hair-result.png) |
+| Face + hair job in progress | Result with before/after comparison |
+| ![Missing Nodes](docs/screenshots/v0.2-missing-face-hair.png) | ![History](docs/screenshots/v0.2-history-with-mode.png) |
+| Face + hair greyed out when nodes missing | History with mode badge (F+H) |
+
+### v0.1 - Face Only
 | | |
 |:---:|:---:|
 | ![Home](docs/screenshots/01-home.png) | ![Face Swap](docs/screenshots/04-face-swap.png) |
@@ -64,6 +76,48 @@ Restart ComfyUI after installation.
 
 Download from [ReActor releases](https://github.com/Gourieff/ComfyUI-ReActor) or HuggingFace.
 Place in `ComfyUI/models/facerestore_models/`
+
+## Face + hair Setup on Hades
+
+The "Face + hair" mode requires additional custom nodes and models beyond the basic Face only setup.
+
+### Required Custom Nodes
+
+| Repository | Install Command |
+|------------|-----------------|
+| [ComfyUI_IPAdapter_plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) | `cd ComfyUI/custom_nodes && git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus && pip install insightface onnxruntime-gpu` |
+| [a-person-mask-generator](https://github.com/djbielejeski/a-person-mask-generator) | `cd ComfyUI/custom_nodes && git clone https://github.com/djbielejeski/a-person-mask-generator && pip install mediapipe` |
+
+Restart ComfyUI after installing custom nodes.
+
+**Note:** The a-person-mask-generator node (`APersonMaskGenerator`) auto-downloads its segmentation model on first use.
+
+### Required Models
+
+| Model File | Folder | Download | Notes |
+|------------|--------|----------|-------|
+| `sd_xl_base_1.0.safetensors` | `checkpoints/` | [sd_xl_base_1.0.safetensors](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors) | |
+| `sdxl_vae.safetensors` | `vae/` | [sdxl_vae.safetensors](https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors) | |
+| `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors` | `clip_vision/` | [model.safetensors](https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors) | **Rename** downloaded file to `CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors` |
+| `ip-adapter-faceid-plusv2_sdxl.bin` | `ipadapter/` | [ip-adapter-faceid-plusv2_sdxl.bin](https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl.bin) | |
+| `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` | `loras/` | [ip-adapter-faceid-plusv2_sdxl_lora.safetensors](https://huggingface.co/h94/IP-Adapter-FaceID/resolve/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors) | |
+| `buffalo_l/` (folder) | `insightface/models/` | Auto-downloaded on first use | Or download from [InsightFace model zoo](https://github.com/deepinsight/insightface/tree/master/python-package#model-zoo) |
+| `inswapper_128.onnx` | `insightface/` | [inswapper_128.onnx](https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx) | For ReActor |
+| `codeformer-v0.1.0.pth` | `facerestore_models/` | [codeformer-v0.1.0.pth](https://huggingface.co/datasets/facefusion/codeformer/resolve/main/codeformer-v0.1.0.pth) | For face restoration |
+
+All folders are relative to `ComfyUI/models/`.
+
+### Summary
+
+Face + hair uses this pipeline:
+1. Segment the target's head (face + hair) using `APersonMaskGenerator` with `face_mask=true, hair_mask=true`
+2. Grow and feather the mask for smooth blending
+3. Load SDXL model with FaceID via `IPAdapterUnifiedLoaderFaceID` (preset: "FACEID PLUS V2", loads LoRA internally)
+4. Inpaint the masked region with SDXL, guided by the source face via `IPAdapterFaceID`
+5. Run ReActor + CodeFormer on top to lock in facial identity
+6. Composite the result back onto the original target
+
+This is tuned for RTX 3060 12GB: SDXL at ~1024px, fp16, 25 steps. Expect 30-60 seconds per image.
 
 ## Installation
 

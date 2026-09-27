@@ -101,6 +101,39 @@
               </div>
             </div>
 
+            <div class="mode-switch-group">
+              <label class="form-label">Mode</label>
+              <div class="mode-switch">
+                <label class="mode-option">
+                  <input type="radio" name="swap-mode" value="face_only" checked />
+                  <span class="mode-label">Face only</span>
+                </label>
+                <label class="mode-option" id="mode-face-hair-label">
+                  <input type="radio" name="swap-mode" value="face_hair" id="mode-face-hair" />
+                  <span class="mode-label">Face + hair</span>
+                </label>
+              </div>
+              <div id="face-hair-unavailable" class="mode-unavailable hidden"></div>
+            </div>
+
+            <div id="face-hair-options" class="face-hair-options hidden">
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span class="slider-label">Blend edges</span>
+                  <span id="value-blend" class="slider-value">0.50</span>
+                </div>
+                <input type="range" id="slider-blend" class="slider" min="0" max="1" step="0.05" value="0.5" />
+              </div>
+
+              <div class="form-group seed-group">
+                <label class="form-label">Seed</label>
+                <div class="seed-input-group">
+                  <input type="number" id="input-seed" class="form-input seed-input" value="0" min="0" />
+                  <button id="random-seed-btn" class="btn btn-secondary seed-btn" title="Random seed">🎲</button>
+                </div>
+              </div>
+            </div>
+
             <div class="slider-group">
               <div class="slider-header">
                 <span class="slider-label">Face Detail (Restore Strength)</span>

@@ -4,6 +4,7 @@ Mock ComfyUI server for testing Comfy Recipes without a real ComfyUI instance.
 
 Usage:
     python server.py [--port 8188]
+    python server.py [--port 8188] --missing-face-hair  # Simulate Face + hair nodes missing
 
 This implements the ComfyUI API endpoints that Comfy Recipes uses:
 - GET /system_stats - Server/GPU info
@@ -34,6 +35,7 @@ MOCK_VRAM_TOTAL = 12 * 1024 * 1024 * 1024  # 12 GB
 MOCK_VRAM_FREE = 10 * 1024 * 1024 * 1024   # 10 GB free
 
 FAKE_RESULT_IMAGE = None
+MISSING_FACE_HAIR = False
 
 def load_fake_result():
     """Load or generate a fake result image."""
@@ -108,8 +110,8 @@ async def handle_system_stats(request):
 
 
 async def handle_object_info(request):
-    """Return mock node definitions including ReActor."""
-    return web.json_response({
+    """Return mock node definitions including ReActor and Face + hair nodes."""
+    nodes = {
         "LoadImage": {
             "input": {
                 "required": {
@@ -160,8 +162,236 @@ async def handle_object_info(request):
             "name": "ReActorFaceSwap",
             "display_name": "ReActor Face Swap",
             "category": "ReActor"
+        },
+        "CheckpointLoaderSimple": {
+            "input": {
+                "required": {
+                    "ckpt_name": [["sd_xl_base_1.0.safetensors", "v1-5-pruned.safetensors"], {}]
+                }
+            },
+            "output": ["MODEL", "CLIP", "VAE"],
+            "name": "CheckpointLoaderSimple",
+            "category": "loaders"
+        },
+        "VAELoader": {
+            "input": {
+                "required": {
+                    "vae_name": [["sdxl_vae.safetensors", "vae-ft-mse-840000-ema-pruned.safetensors"], {}]
+                }
+            },
+            "output": ["VAE"],
+            "name": "VAELoader",
+            "category": "loaders"
+        },
+        "LoraLoader": {
+            "input": {
+                "required": {
+                    "model": ["MODEL", {}],
+                    "clip": ["CLIP", {}],
+                    "lora_name": [["ip-adapter-faceid-plusv2_sdxl_lora.safetensors"], {}],
+                    "strength_model": ["FLOAT", {"default": 1.0}],
+                    "strength_clip": ["FLOAT", {"default": 1.0}]
+                }
+            },
+            "output": ["MODEL", "CLIP"],
+            "name": "LoraLoader",
+            "category": "loaders"
+        },
+        "KSampler": {
+            "input": {
+                "required": {
+                    "model": ["MODEL", {}],
+                    "positive": ["CONDITIONING", {}],
+                    "negative": ["CONDITIONING", {}],
+                    "latent_image": ["LATENT", {}],
+                    "seed": ["INT", {"default": 0}],
+                    "steps": ["INT", {"default": 20}],
+                    "cfg": ["FLOAT", {"default": 7.0}],
+                    "sampler_name": [["euler", "euler_ancestral", "dpmpp_2m"], {}],
+                    "scheduler": [["normal", "karras"], {}],
+                    "denoise": ["FLOAT", {"default": 1.0}]
+                }
+            },
+            "output": ["LATENT"],
+            "name": "KSampler",
+            "category": "sampling"
+        },
+        "VAEDecode": {
+            "input": {
+                "required": {
+                    "samples": ["LATENT", {}],
+                    "vae": ["VAE", {}]
+                }
+            },
+            "output": ["IMAGE"],
+            "name": "VAEDecode",
+            "category": "latent"
+        },
+        "VAEEncode": {
+            "input": {
+                "required": {
+                    "pixels": ["IMAGE", {}],
+                    "vae": ["VAE", {}]
+                }
+            },
+            "output": ["LATENT"],
+            "name": "VAEEncode",
+            "category": "latent"
+        },
+        "CLIPTextEncode": {
+            "input": {
+                "required": {
+                    "text": ["STRING", {"multiline": True}],
+                    "clip": ["CLIP", {}]
+                }
+            },
+            "output": ["CONDITIONING"],
+            "name": "CLIPTextEncode",
+            "category": "conditioning"
+        },
+        "SetLatentNoiseMask": {
+            "input": {
+                "required": {
+                    "samples": ["LATENT", {}],
+                    "mask": ["MASK", {}]
+                }
+            },
+            "output": ["LATENT"],
+            "name": "SetLatentNoiseMask",
+            "category": "latent"
+        },
+        "GrowMask": {
+            "input": {
+                "required": {
+                    "mask": ["MASK", {}],
+                    "expand": ["INT", {"default": 0}],
+                    "tapered_corners": ["BOOLEAN", {"default": True}]
+                }
+            },
+            "output": ["MASK"],
+            "name": "GrowMask",
+            "category": "mask"
+        },
+        "FeatherMask": {
+            "input": {
+                "required": {
+                    "mask": ["MASK", {}],
+                    "left": ["INT", {"default": 0}],
+                    "right": ["INT", {"default": 0}],
+                    "top": ["INT", {"default": 0}],
+                    "bottom": ["INT", {"default": 0}]
+                }
+            },
+            "output": ["MASK"],
+            "name": "FeatherMask",
+            "category": "mask"
+        },
+        "ImageCompositeMasked": {
+            "input": {
+                "required": {
+                    "destination": ["IMAGE", {}],
+                    "source": ["IMAGE", {}],
+                    "mask": ["MASK", {}],
+                    "x": ["INT", {"default": 0}],
+                    "y": ["INT", {"default": 0}],
+                    "resize_source": ["BOOLEAN", {"default": False}]
+                }
+            },
+            "output": ["IMAGE"],
+            "name": "ImageCompositeMasked",
+            "category": "image"
+        }
+    }
+
+    nodes.update({
+        "CLIPVisionLoader": {
+            "input": {
+                "required": {
+                    "clip_name": [["CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors", "CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors"], {}]
+                }
+            },
+            "output": ["CLIP_VISION"],
+            "name": "CLIPVisionLoader",
+            "category": "loaders"
         }
     })
+
+    if not MISSING_FACE_HAIR:
+        nodes.update({
+            "IPAdapterFaceID": {
+                "input": {
+                    "required": {
+                        "model": ["MODEL", {}],
+                        "ipadapter": ["IPADAPTER", {}],
+                        "image": ["IMAGE", {}],
+                        "weight": ["FLOAT", {"default": 0.85, "min": -1, "max": 3, "step": 0.05}],
+                        "weight_faceidv2": ["FLOAT", {"default": 0.85, "min": -1, "max": 5, "step": 0.05}],
+                        "weight_type": [["linear", "ease in", "ease out", "ease in-out", "reverse in-out", "weak input", "weak output", "weak middle", "strong middle", "style transfer", "composition", "strong style transfer", "style and target"], {}],
+                        "combine_embeds": [["average", "concat", "norm average"], {}],
+                        "start_at": ["FLOAT", {"default": 0.0, "min": 0, "max": 1, "step": 0.001}],
+                        "end_at": ["FLOAT", {"default": 1.0, "min": 0, "max": 1, "step": 0.001}],
+                        "embeds_scaling": [["V only", "K+V", "K+V w/ C penalty", "K+mean(V) w/ C penalty"], {}]
+                    },
+                    "optional": {
+                        "clip_vision": ["CLIP_VISION", {}],
+                        "insightface": ["INSIGHTFACE", {}],
+                        "attn_mask": ["MASK", {}]
+                    }
+                },
+                "output": ["MODEL"],
+                "name": "IPAdapterFaceID",
+                "display_name": "IPAdapter FaceID",
+                "category": "ipadapter/faceid"
+            },
+            "IPAdapterUnifiedLoaderFaceID": {
+                "input": {
+                    "required": {
+                        "model": ["MODEL", {}],
+                        "preset": [["FACEID", "FACEID PLUS - SD1.5 only", "FACEID PLUS V2", "FACEID PORTRAIT (style transfer)", "FACEID PORTRAIT UNNORM - SDXL only (strong)"], {}],
+                        "lora_strength": ["FLOAT", {"default": 0.6, "min": 0, "max": 1, "step": 0.01}],
+                        "provider": [["CPU", "CUDA", "ROCM", "DirectML", "OpenVINO", "CoreML"], {}]
+                    }
+                },
+                "output": ["MODEL", "IPADAPTER", "INSIGHTFACE"],
+                "output_name": ["MODEL", "ipadapter", "insightface"],
+                "name": "IPAdapterUnifiedLoaderFaceID",
+                "display_name": "IPAdapter Unified Loader FaceID",
+                "category": "ipadapter/loaders"
+            },
+            "IPAdapterModelLoader": {
+                "input": {
+                    "required": {
+                        "ipadapter_file": [["ip-adapter-faceid-plusv2_sdxl.bin", "ip-adapter_sdxl.safetensors"], {}]
+                    }
+                },
+                "output": ["IPADAPTER"],
+                "name": "IPAdapterModelLoader",
+                "category": "ipadapter"
+            },
+            "APersonMaskGenerator": {
+                "input": {
+                    "required": {
+                        "images": ["IMAGE", {}]
+                    },
+                    "optional": {
+                        "face_mask": ["BOOLEAN", {"default": True}],
+                        "background_mask": ["BOOLEAN", {"default": False}],
+                        "hair_mask": ["BOOLEAN", {"default": False}],
+                        "body_mask": ["BOOLEAN", {"default": False}],
+                        "clothes_mask": ["BOOLEAN", {"default": False}],
+                        "confidence": ["FLOAT", {"default": 0.40, "min": 0.01, "max": 1.0, "step": 0.01}],
+                        "refine_mask": ["BOOLEAN", {"default": True}]
+                    }
+                },
+                "output": ["MASK"],
+                "output_name": ["masks"],
+                "name": "APersonMaskGenerator",
+                "display_name": "A Person Mask Generator",
+                "category": "A Person Mask Generator"
+            }
+        })
+
+    return web.json_response(nodes)
 
 
 async def handle_upload_image(request):
@@ -184,13 +414,79 @@ async def handle_upload_image(request):
     })
 
 
+def get_available_nodes():
+    """Get the current set of available nodes (same logic as handle_object_info)."""
+    nodes = {
+        "LoadImage", "SaveImage", "ReActorFaceSwap", "CheckpointLoaderSimple",
+        "VAELoader", "LoraLoader", "KSampler", "VAEDecode", "VAEEncode",
+        "CLIPTextEncode", "SetLatentNoiseMask", "GrowMask", "FeatherMask",
+        "ImageCompositeMasked", "CLIPVisionLoader"
+    }
+    if not MISSING_FACE_HAIR:
+        nodes.update({
+            "IPAdapterFaceID", "IPAdapterUnifiedLoaderFaceID", "IPAdapterModelLoader",
+            "APersonMaskGenerator"
+        })
+    return nodes
+
+
+def validate_prompt(prompt: dict) -> tuple[bool, dict]:
+    """
+    Validate a prompt against available nodes.
+    Returns (is_valid, node_errors dict).
+    """
+    available_nodes = get_available_nodes()
+    node_errors = {}
+    
+    for node_id, node_data in prompt.items():
+        if not isinstance(node_data, dict):
+            continue
+        
+        class_type = node_data.get("class_type")
+        if not class_type:
+            node_errors[node_id] = {
+                "type": "missing_class_type",
+                "message": f"Node {node_id} is missing class_type",
+                "details": "",
+                "extra_info": {}
+            }
+            continue
+        
+        if class_type not in available_nodes:
+            node_errors[node_id] = {
+                "type": "invalid_class_type",
+                "message": f"Unknown node type: {class_type}",
+                "details": f"Node type '{class_type}' is not installed or does not exist",
+                "extra_info": {"class_type": class_type}
+            }
+    
+    return len(node_errors) == 0, node_errors
+
+
 async def handle_prompt(request):
     """Queue a prompt and return prompt ID."""
     data = await request.json()
+    prompt = data.get("prompt", {})
+    
+    # Validate the prompt
+    is_valid, node_errors = validate_prompt(prompt)
+    
+    if not is_valid:
+        # Return error response like real ComfyUI does
+        return web.json_response({
+            "error": {
+                "type": "prompt_invalid",
+                "message": "Prompt validation failed",
+                "details": "",
+                "extra_info": {}
+            },
+            "node_errors": node_errors
+        }, status=400)
+    
     prompt_id = str(uuid.uuid4())
     
     PROMPTS[prompt_id] = {
-        "prompt": data.get("prompt", {}),
+        "prompt": prompt,
         "client_id": data.get("client_id", ""),
         "queued_at": datetime.now().isoformat()
     }
@@ -207,12 +503,19 @@ async def handle_prompt(request):
 
 async def execute_prompt(prompt_id: str, client_id: str):
     """Simulate prompt execution with progress updates."""
+    prompt_data = PROMPTS.get(prompt_id, {})
+    prompt = prompt_data.get("prompt", {})
+    
+    is_face_hair = any("IPAdapterFaceID" in str(node) or "APersonMaskGenerator" in str(node) 
+                       for node in prompt.values())
+    
+    steps = 25 if is_face_hair else 10
+    delay = 0.15 if is_face_hair else 0.2
+    
     await asyncio.sleep(0.5)
     
-    # Find websocket connections for this client
     for ws in list(WS_CONNECTIONS):
         try:
-            # Send executing message
             await ws.send_json({
                 "type": "executing",
                 "data": {
@@ -221,27 +524,28 @@ async def execute_prompt(prompt_id: str, client_id: str):
                 }
             })
             
-            # Send progress updates
-            for i in range(10):
-                await asyncio.sleep(0.2)
+            for i in range(steps):
+                await asyncio.sleep(delay)
                 await ws.send_json({
                     "type": "progress",
                     "data": {
                         "value": i + 1,
-                        "max": 10
+                        "max": steps
                     }
                 })
             
-            # Send executed message
+            output_node = "90" if is_face_hair else "4"
+            subfolder = "comfy_recipes/face_hair" if is_face_hair else "comfy_recipes"
+            
             await ws.send_json({
                 "type": "executed",
                 "data": {
                     "prompt_id": prompt_id,
-                    "node": "4",
+                    "node": output_node,
                     "output": {
                         "images": [{
                             "filename": f"result_{prompt_id[:8]}.png",
-                            "subfolder": "comfy_recipes",
+                            "subfolder": subfolder,
                             "type": "output"
                         }]
                     }
@@ -250,13 +554,15 @@ async def execute_prompt(prompt_id: str, client_id: str):
         except Exception as e:
             print(f"WebSocket error: {e}")
     
-    # Store result
+    output_node = "90" if is_face_hair else "4"
+    subfolder = "comfy_recipes/face_hair" if is_face_hair else "comfy_recipes"
+    
     RESULTS[prompt_id] = {
         "outputs": {
-            "4": {
+            output_node: {
                 "images": [{
                     "filename": f"result_{prompt_id[:8]}.png",
-                    "subfolder": "comfy_recipes",
+                    "subfolder": subfolder,
                     "type": "output"
                 }]
             }
@@ -340,16 +646,27 @@ def create_app():
 
 
 def main():
+    global MISSING_FACE_HAIR
+    
     parser = argparse.ArgumentParser(description='Mock ComfyUI server')
     parser.add_argument('--port', type=int, default=8188, help='Port to listen on')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--missing-face-hair', action='store_true', 
+                        help='Simulate missing Face + hair nodes/models')
     args = parser.parse_args()
+    
+    MISSING_FACE_HAIR = args.missing_face_hair
     
     load_fake_result()
     
     app = create_app()
     
     print(f"Mock ComfyUI server starting on http://{args.host}:{args.port}")
+    if MISSING_FACE_HAIR:
+        print("  MODE: Face + hair nodes MISSING (greyed out state)")
+    else:
+        print("  MODE: All nodes available")
+    print()
     print("Endpoints:")
     print("  GET  /system_stats - Server info")
     print("  GET  /object_info  - Node definitions")
