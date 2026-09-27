@@ -1,0 +1,86 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install Rust targets
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Tauri app (Universal macOS)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target universal-apple-darwin
+
+      - name: Upload artifact (PR builds)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Comfy-Recipes-${{ steps.version.outputs.version }}-universal-macos
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Create/Update Release (main branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Comfy Recipes v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          body: |
+            ## Comfy Recipes v${{ steps.version.outputs.version }}
+            
+            A Mac desktop app for running ComfyUI face-swap workflows without touching nodes.
+            
+            ### Installation
+            
+            1. Download the `.dmg` file below
+            2. Open the `.dmg` and drag Comfy Recipes to Applications
+            3. On first launch, macOS will show a Gatekeeper warning (the app is unsigned)
+            4. Right-click the app and select "Open", then click "Open" in the dialog
+               - Or: Go to System Settings → Privacy & Security → click "Open Anyway"
+            
+            ### Requirements
+            
+            - ComfyUI running on your server (e.g., Hades) with `--listen` flag
+            - ReActor custom node installed with required models
+            
+            See the README for detailed setup instructions.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
