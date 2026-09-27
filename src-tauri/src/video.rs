@@ -167,7 +167,6 @@ pub fn extract_frames(
     std::fs::create_dir_all(output_dir).map_err(|e| format!("Failed to create temp dir: {}", e))?;
 
     let pattern = output_dir.join("frame_%04d.png");
-    let pattern_str = pattern.to_string_lossy();
 
     let vf = format!(
         "fps={},scale='min({},iw)':-2",
