@@ -279,9 +279,10 @@ impl ComfyClient {
                 "checkpoints" => self.check_model_in_node(&info, "CheckpointLoaderSimple", "ckpt_name", filename),
                 "vae" => self.check_model_in_node(&info, "VAELoader", "vae_name", filename),
                 "loras" => self.check_model_in_node(&info, "LoraLoader", "lora_name", filename),
+                "clip_vision" => self.check_model_in_node(&info, "CLIPVisionLoader", "clip_name", filename),
                 "ipadapter" => {
                     self.check_model_in_node(&info, "IPAdapterModelLoader", "ipadapter_file", filename)
-                        || self.check_unified_loader(&info, filename)
+                        || self.check_unified_loader_faceid(&info, filename)
                 }
                 "insightface" => true,
                 "facerestore_models" => self.check_reactor_model(&info, filename),
@@ -317,8 +318,8 @@ impl ComfyClient {
         false
     }
 
-    fn check_unified_loader(&self, info: &HashMap<String, serde_json::Value>, filename: &str) -> bool {
-        if let Some(node) = info.get("IPAdapterUnifiedLoader") {
+    fn check_unified_loader_faceid(&self, info: &HashMap<String, serde_json::Value>, filename: &str) -> bool {
+        if let Some(node) = info.get("IPAdapterUnifiedLoaderFaceID") {
             if let Some(inputs) = node.get("input").and_then(|i| i.get("required")) {
                 if let Some(preset) = inputs.get("preset") {
                     if let Some(options) = preset.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()) {

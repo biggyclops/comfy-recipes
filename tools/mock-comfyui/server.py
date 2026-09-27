@@ -303,6 +303,19 @@ async def handle_object_info(request):
         }
     }
 
+    nodes.update({
+        "CLIPVisionLoader": {
+            "input": {
+                "required": {
+                    "clip_name": [["CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors", "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"], {}]
+                }
+            },
+            "output": ["CLIP_VISION"],
+            "name": "CLIPVisionLoader",
+            "category": "loaders"
+        }
+    })
+
     if not MISSING_FACE_HAIR:
         nodes.update({
             "IPAdapterFaceID": {
@@ -311,29 +324,39 @@ async def handle_object_info(request):
                         "model": ["MODEL", {}],
                         "ipadapter": ["IPADAPTER", {}],
                         "image": ["IMAGE", {}],
-                        "weight": ["FLOAT", {"default": 0.85}],
-                        "weight_faceidv2": ["FLOAT", {"default": 0.85}],
-                        "weight_type": [["linear", "ease in", "ease out"], {}],
-                        "combine_embeds": [["average", "concat"], {}],
-                        "start_at": ["FLOAT", {"default": 0.0}],
-                        "end_at": ["FLOAT", {"default": 1.0}],
-                        "embeds_scaling": [["V only", "K+V"], {}]
+                        "weight": ["FLOAT", {"default": 0.85, "min": -1, "max": 3, "step": 0.05}],
+                        "weight_faceidv2": ["FLOAT", {"default": 0.85, "min": -1, "max": 5, "step": 0.05}],
+                        "weight_type": [["linear", "ease in", "ease out", "ease in-out", "reverse in-out", "weak input", "weak output", "weak middle", "strong middle", "style transfer", "composition", "strong style transfer", "style and target"], {}],
+                        "combine_embeds": [["average", "concat", "norm average"], {}],
+                        "start_at": ["FLOAT", {"default": 0.0, "min": 0, "max": 1, "step": 0.001}],
+                        "end_at": ["FLOAT", {"default": 1.0, "min": 0, "max": 1, "step": 0.001}],
+                        "embeds_scaling": [["V only", "K+V", "K+V w/ C penalty", "K+mean(V) w/ C penalty"], {}]
+                    },
+                    "optional": {
+                        "clip_vision": ["CLIP_VISION", {}],
+                        "insightface": ["INSIGHTFACE", {}],
+                        "attn_mask": ["MASK", {}]
                     }
                 },
                 "output": ["MODEL"],
                 "name": "IPAdapterFaceID",
-                "category": "ipadapter"
+                "display_name": "IPAdapter FaceID",
+                "category": "ipadapter/faceid"
             },
-            "IPAdapterUnifiedLoader": {
+            "IPAdapterUnifiedLoaderFaceID": {
                 "input": {
                     "required": {
                         "model": ["MODEL", {}],
-                        "preset": [["FACEID PLUS V2", "FACEID", "PLUS (high strength)", "STANDARD (medium strength)"], {}]
+                        "preset": [["FACEID", "FACEID PLUS - SD1.5 only", "FACEID PLUS V2", "FACEID PORTRAIT (style transfer)", "FACEID PORTRAIT UNNORM - SDXL only (strong)"], {}],
+                        "lora_strength": ["FLOAT", {"default": 0.6, "min": 0, "max": 1, "step": 0.01}],
+                        "provider": [["CPU", "CUDA", "ROCM", "DirectML", "OpenVINO", "CoreML"], {}]
                     }
                 },
-                "output": ["MODEL", "IPADAPTER"],
-                "name": "IPAdapterUnifiedLoader",
-                "category": "ipadapter"
+                "output": ["MODEL", "IPADAPTER", "INSIGHTFACE"],
+                "output_name": ["MODEL", "ipadapter", "insightface"],
+                "name": "IPAdapterUnifiedLoaderFaceID",
+                "display_name": "IPAdapter Unified Loader FaceID",
+                "category": "ipadapter/loaders"
             },
             "IPAdapterModelLoader": {
                 "input": {
@@ -345,17 +368,26 @@ async def handle_object_info(request):
                 "name": "IPAdapterModelLoader",
                 "category": "ipadapter"
             },
-            "PersonMaskGenerator": {
+            "APersonMaskGenerator": {
                 "input": {
                     "required": {
-                        "image": ["IMAGE", {}],
-                        "mask_type": [["head", "face", "hair", "body"], {}]
+                        "images": ["IMAGE", {}]
+                    },
+                    "optional": {
+                        "face_mask": ["BOOLEAN", {"default": True}],
+                        "background_mask": ["BOOLEAN", {"default": False}],
+                        "hair_mask": ["BOOLEAN", {"default": False}],
+                        "body_mask": ["BOOLEAN", {"default": False}],
+                        "clothes_mask": ["BOOLEAN", {"default": False}],
+                        "confidence": ["FLOAT", {"default": 0.40, "min": 0.01, "max": 1.0, "step": 0.01}],
+                        "refine_mask": ["BOOLEAN", {"default": True}]
                     }
                 },
                 "output": ["MASK"],
-                "name": "PersonMaskGenerator",
-                "display_name": "Person Mask Generator",
-                "category": "ImpactPack"
+                "output_name": ["masks"],
+                "name": "APersonMaskGenerator",
+                "display_name": "A Person Mask Generator",
+                "category": "A Person Mask Generator"
             }
         })
 
@@ -382,13 +414,79 @@ async def handle_upload_image(request):
     })
 
 
+def get_available_nodes():
+    """Get the current set of available nodes (same logic as handle_object_info)."""
+    nodes = {
+        "LoadImage", "SaveImage", "ReActorFaceSwap", "CheckpointLoaderSimple",
+        "VAELoader", "LoraLoader", "KSampler", "VAEDecode", "VAEEncode",
+        "CLIPTextEncode", "SetLatentNoiseMask", "GrowMask", "FeatherMask",
+        "ImageCompositeMasked", "CLIPVisionLoader"
+    }
+    if not MISSING_FACE_HAIR:
+        nodes.update({
+            "IPAdapterFaceID", "IPAdapterUnifiedLoaderFaceID", "IPAdapterModelLoader",
+            "APersonMaskGenerator"
+        })
+    return nodes
+
+
+def validate_prompt(prompt: dict) -> tuple[bool, dict]:
+    """
+    Validate a prompt against available nodes.
+    Returns (is_valid, node_errors dict).
+    """
+    available_nodes = get_available_nodes()
+    node_errors = {}
+    
+    for node_id, node_data in prompt.items():
+        if not isinstance(node_data, dict):
+            continue
+        
+        class_type = node_data.get("class_type")
+        if not class_type:
+            node_errors[node_id] = {
+                "type": "missing_class_type",
+                "message": f"Node {node_id} is missing class_type",
+                "details": "",
+                "extra_info": {}
+            }
+            continue
+        
+        if class_type not in available_nodes:
+            node_errors[node_id] = {
+                "type": "invalid_class_type",
+                "message": f"Unknown node type: {class_type}",
+                "details": f"Node type '{class_type}' is not installed or does not exist",
+                "extra_info": {"class_type": class_type}
+            }
+    
+    return len(node_errors) == 0, node_errors
+
+
 async def handle_prompt(request):
     """Queue a prompt and return prompt ID."""
     data = await request.json()
+    prompt = data.get("prompt", {})
+    
+    # Validate the prompt
+    is_valid, node_errors = validate_prompt(prompt)
+    
+    if not is_valid:
+        # Return error response like real ComfyUI does
+        return web.json_response({
+            "error": {
+                "type": "prompt_invalid",
+                "message": "Prompt validation failed",
+                "details": "",
+                "extra_info": {}
+            },
+            "node_errors": node_errors
+        }, status=400)
+    
     prompt_id = str(uuid.uuid4())
     
     PROMPTS[prompt_id] = {
-        "prompt": data.get("prompt", {}),
+        "prompt": prompt,
         "client_id": data.get("client_id", ""),
         "queued_at": datetime.now().isoformat()
     }
@@ -408,7 +506,7 @@ async def execute_prompt(prompt_id: str, client_id: str):
     prompt_data = PROMPTS.get(prompt_id, {})
     prompt = prompt_data.get("prompt", {})
     
-    is_face_hair = any("IPAdapterFaceID" in str(node) or "PersonMaskGenerator" in str(node) 
+    is_face_hair = any("IPAdapterFaceID" in str(node) or "APersonMaskGenerator" in str(node) 
                        for node in prompt.values())
     
     steps = 25 if is_face_hair else 10

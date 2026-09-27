@@ -3,6 +3,7 @@ use serde_json::json;
 
 pub const SDXL_CHECKPOINT: &str = "sd_xl_base_1.0.safetensors";
 pub const SDXL_VAE: &str = "sdxl_vae.safetensors";
+pub const CLIP_VISION_MODEL: &str = "CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors";
 pub const IPADAPTER_FACEID_MODEL: &str = "ip-adapter-faceid-plusv2_sdxl.bin";
 pub const IPADAPTER_FACEID_LORA: &str = "ip-adapter-faceid-plusv2_sdxl_lora.safetensors";
 pub const INSIGHTFACE_MODEL: &str = "buffalo_l";
@@ -19,8 +20,8 @@ pub const FACE_HAIR_REQUIRED_NODES: &[&str] = &[
     "VAEDecode",
     "VAEEncode",
     "IPAdapterFaceID",
-    "IPAdapterUnifiedLoader",
-    "PersonMaskGenerator",
+    "IPAdapterUnifiedLoaderFaceID",
+    "APersonMaskGenerator",
     "GrowMask",
     "FeatherMask",
     "ImageCompositeMasked",
@@ -31,6 +32,7 @@ pub const FACE_HAIR_REQUIRED_NODES: &[&str] = &[
 pub const FACE_HAIR_REQUIRED_MODELS: &[(&str, &str)] = &[
     ("checkpoints", SDXL_CHECKPOINT),
     ("vae", SDXL_VAE),
+    ("clip_vision", CLIP_VISION_MODEL),
     ("ipadapter", IPADAPTER_FACEID_MODEL),
     ("loras", IPADAPTER_FACEID_LORA),
     ("insightface", INSWAPPER_MODEL),
@@ -180,10 +182,16 @@ pub fn build_face_swap_hair_workflow(params: &FaceSwapHairParams) -> serde_json:
             }
         },
         "20": {
-            "class_type": "PersonMaskGenerator",
+            "class_type": "APersonMaskGenerator",
             "inputs": {
-                "image": ["2", 0],
-                "mask_type": "head"
+                "images": ["2", 0],
+                "face_mask": true,
+                "hair_mask": true,
+                "body_mask": false,
+                "clothes_mask": false,
+                "background_mask": false,
+                "confidence": 0.4,
+                "refine_mask": true
             }
         },
         "21": {
@@ -205,10 +213,12 @@ pub fn build_face_swap_hair_workflow(params: &FaceSwapHairParams) -> serde_json:
             }
         },
         "30": {
-            "class_type": "IPAdapterUnifiedLoader",
+            "class_type": "IPAdapterUnifiedLoaderFaceID",
             "inputs": {
                 "model": ["10", 0],
-                "preset": "FACEID PLUS V2"
+                "preset": "FACEID PLUS V2",
+                "lora_strength": 0.6,
+                "provider": "CUDA"
             }
         },
         "31": {
@@ -337,26 +347,34 @@ pub fn get_fix_instructions(missing_nodes: &[String]) -> Vec<String> {
                      Place it in ComfyUI/models/facerestore_models/".to_string()
                 );
             }
-            "IPAdapterFaceID" | "IPAdapterUnifiedLoader" => {
+            "IPAdapterFaceID" | "IPAdapterUnifiedLoaderFaceID" => {
                 instructions.push(
                     "Install ComfyUI_IPAdapter_plus on Hades:\n\
                      1. cd ComfyUI/custom_nodes\n\
                      2. git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus\n\
-                     3. Restart ComfyUI".to_string()
+                     3. pip install insightface onnxruntime-gpu\n\
+                     4. Restart ComfyUI".to_string()
                 );
                 instructions.push(
                     "Download IP-Adapter FaceID Plus V2 models:\n\
                      - ip-adapter-faceid-plusv2_sdxl.bin -> ComfyUI/models/ipadapter/\n\
-                     - ip-adapter-faceid-plusv2_sdxl_lora.safetensors -> ComfyUI/models/loras/".to_string()
+                     - ip-adapter-faceid-plusv2_sdxl_lora.safetensors -> ComfyUI/models/loras/\n\
+                     - CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors -> ComfyUI/models/clip_vision/".to_string()
+                );
+                instructions.push(
+                    "Download InsightFace buffalo_l model:\n\
+                     - Run once with IPAdapter to auto-download, or manually download and place in:\n\
+                       ComfyUI/models/insightface/models/buffalo_l/".to_string()
                 );
             }
-            "PersonMaskGenerator" => {
+            "APersonMaskGenerator" => {
                 instructions.push(
-                    "Install ComfyUI-Impact-Pack on Hades:\n\
+                    "Install a-person-mask-generator on Hades:\n\
                      1. cd ComfyUI/custom_nodes\n\
-                     2. git clone https://github.com/ltdrdata/ComfyUI-Impact-Pack\n\
-                     3. cd ComfyUI-Impact-Pack && pip install -r requirements.txt\n\
-                     4. Restart ComfyUI".to_string()
+                     2. git clone https://github.com/djbielejeski/a-person-mask-generator\n\
+                     3. pip install mediapipe\n\
+                     4. Restart ComfyUI\n\
+                     Note: This node auto-downloads the segmentation model on first use.".to_string()
                 );
             }
             "GrowMask" | "FeatherMask" | "ImageCompositeMasked" => {

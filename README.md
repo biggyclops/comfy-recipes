@@ -85,10 +85,12 @@ The "Face + hair" mode requires additional custom nodes and models beyond the ba
 
 | Repository | Install Command |
 |------------|-----------------|
-| [ComfyUI_IPAdapter_plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) | `cd ComfyUI/custom_nodes && git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus` |
-| [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) | `cd ComfyUI/custom_nodes && git clone https://github.com/ltdrdata/ComfyUI-Impact-Pack && cd ComfyUI-Impact-Pack && pip install -r requirements.txt` |
+| [ComfyUI_IPAdapter_plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) | `cd ComfyUI/custom_nodes && git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus && pip install insightface onnxruntime-gpu` |
+| [a-person-mask-generator](https://github.com/djbielejeski/a-person-mask-generator) | `cd ComfyUI/custom_nodes && git clone https://github.com/djbielejeski/a-person-mask-generator && pip install mediapipe` |
 
 Restart ComfyUI after installing custom nodes.
+
+**Note:** The a-person-mask-generator node (`APersonMaskGenerator`) auto-downloads its segmentation model on first use.
 
 ### Required Models
 
@@ -96,17 +98,20 @@ Restart ComfyUI after installing custom nodes.
 |------------|--------|---------------|
 | `sd_xl_base_1.0.safetensors` | `ComfyUI/models/checkpoints/` | [HuggingFace - stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/sd_xl_base_1.0.safetensors) |
 | `sdxl_vae.safetensors` | `ComfyUI/models/vae/` | [HuggingFace - stabilityai/sdxl-vae](https://huggingface.co/stabilityai/sdxl-vae/blob/main/sdxl_vae.safetensors) |
+| `CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors` | `ComfyUI/models/clip_vision/` | [HuggingFace - h94/IP-Adapter (SDXL models)](https://huggingface.co/h94/IP-Adapter/blob/main/sdxl_models/image_encoder/model.safetensors) (rename to `CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors`) |
 | `ip-adapter-faceid-plusv2_sdxl.bin` | `ComfyUI/models/ipadapter/` | [HuggingFace - h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID/blob/main/ip-adapter-faceid-plusv2_sdxl.bin) |
 | `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` | `ComfyUI/models/loras/` | [HuggingFace - h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID/blob/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors) |
+| InsightFace `buffalo_l` | `ComfyUI/models/insightface/models/buffalo_l/` | Auto-downloaded on first use by IPAdapter FaceID, or manually from [InsightFace](https://github.com/deepinsight/insightface/tree/master/python-package#model-zoo) |
 
 ### Summary
 
 Face + hair uses this pipeline:
-1. Segment the target's head (face + hair + ears) using PersonMaskGenerator from Impact Pack
+1. Segment the target's head (face + hair) using `APersonMaskGenerator` with `face_mask=true, hair_mask=true`
 2. Grow and feather the mask for smooth blending
-3. Inpaint the masked region with SDXL, guided by the source face via IPAdapter FaceID Plus V2
-4. Run ReActor + CodeFormer on top to lock in facial identity
-5. Composite the result back onto the original target
+3. Load SDXL model with FaceID via `IPAdapterUnifiedLoaderFaceID` (preset: "FACEID PLUS V2", loads LoRA internally)
+4. Inpaint the masked region with SDXL, guided by the source face via `IPAdapterFaceID`
+5. Run ReActor + CodeFormer on top to lock in facial identity
+6. Composite the result back onto the original target
 
 This is tuned for RTX 3060 12GB: SDXL at ~1024px, fp16, 25 steps. Expect 30-60 seconds per image.
 
