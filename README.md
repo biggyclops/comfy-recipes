@@ -12,6 +12,17 @@ A Mac desktop app for running ComfyUI face-swap workflows without touching nodes
 
 ## Screenshots
 
+### v0.2 - Face + hair Mode
+| | |
+|:---:|:---:|
+| ![Health OK](docs/screenshots/v0.2-health-ok.png) | ![Face + hair Mode](docs/screenshots/v0.2-face-hair-mode.png) |
+| Health check with Face + hair ready | Face + hair controls (blend edges, seed) |
+| ![Progress](docs/screenshots/v0.2-face-hair-progress.png) | ![Result](docs/screenshots/v0.2-face-hair-result.png) |
+| Face + hair job in progress | Result with before/after comparison |
+| ![Missing Nodes](docs/screenshots/v0.2-missing-face-hair.png) | ![History](docs/screenshots/v0.2-history-with-mode.png) |
+| Face + hair greyed out when nodes missing | History with mode badge (F+H) |
+
+### v0.1 - Face Only
 | | |
 |:---:|:---:|
 | ![Home](docs/screenshots/01-home.png) | ![Face Swap](docs/screenshots/04-face-swap.png) |
