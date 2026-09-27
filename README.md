@@ -9,6 +9,17 @@ A Mac desktop app for running ComfyUI face-swap workflows without touching nodes
 - **History**: Last 50 results saved locally with settings, so you can repeat good results
 - **Privacy**: Everything stays on your home network - no accounts, telemetry, or cloud services
 
+## Screenshots
+
+| | |
+|:---:|:---:|
+| ![Home](docs/screenshots/01-home.png) | ![Face Swap](docs/screenshots/04-face-swap.png) |
+| Recipe selection | Image upload and settings |
+| ![Health Check](docs/screenshots/03-health-ok.png) | ![Result](docs/screenshots/06-result.png) |
+| Server status and GPU info | Before/after comparison |
+
+See all screenshots in [`docs/screenshots/`](docs/screenshots/).
+
 ## Requirements
 
 ### On Your Mac
