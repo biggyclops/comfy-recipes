@@ -182,7 +182,7 @@ pub fn extract_frames(
         .arg(format!("{}", max_duration_secs))
         .arg("-vf")
         .arg(vf)
-        .arg(&pattern_str)
+        .arg(&pattern)
         .output()
         .map_err(|e| format!("Failed to run ffmpeg extract: {}", e))?;
 
@@ -240,7 +240,7 @@ pub fn encode_video_from_frames(
         .arg("-framerate")
         .arg(format!("{}", processing_fps))
         .arg("-i")
-        .arg(input_pattern.to_string_lossy().as_ref())
+        .arg(&input_pattern)
         .arg("-i")
         .arg(audio_source_video)
         .arg("-map")
