@@ -455,3 +455,26 @@ pub fn get_face_hair_fix_instructions(missing_nodes: &[String], missing_models: 
 
     instructions
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn face_swap_workflow_uses_uploaded_image_names() {
+        let params = FaceSwapParams {
+            source_image: "source_upload.png".to_string(),
+            target_image: "frame_0001.png".to_string(),
+            ..Default::default()
+        };
+        let workflow = build_face_swap_workflow(&params);
+        assert_eq!(
+            workflow["1"]["inputs"]["image"].as_str(),
+            Some("source_upload.png")
+        );
+        assert_eq!(
+            workflow["2"]["inputs"]["image"].as_str(),
+            Some("frame_0001.png")
+        );
+    }
+}

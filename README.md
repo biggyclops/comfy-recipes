@@ -5,6 +5,7 @@ A Mac desktop app for running ComfyUI face-swap workflows without touching nodes
 ## Features
 
 - **Face Swap (Face only)**: Swap a face from one photo onto another using ReActor (fast, ~3 seconds)
+- **Video face swap (Face only)**: Swap a source face onto a short target video (up to 10 seconds) using the same ReActor pipeline per frame; audio from the original clip is preserved when present
 - **Face Swap (Face + hair)**: Replace the whole head including hair, keeping the target's body, pose, and background (SDXL + IPAdapter, ~30-60 seconds)
 - **Simple UI**: No node graphs - just pick photos and adjust a few sliders
 - **History**: Last 50 results saved locally with settings and mode, so you can repeat good results
@@ -36,6 +37,7 @@ See all screenshots in [`docs/screenshots/`](docs/screenshots/).
 
 ### On Your Mac
 - macOS 10.15 (Catalina) or later
+- **ffmpeg** for video mode: `brew install ffmpeg` (the app uses `ffmpeg` / `ffprobe` on your PATH, or set `FFMPEG_PATH` / `FFPROBE_PATH`)
 
 ### On Hades (or your ComfyUI server)
 - ComfyUI running with `--listen` flag so other machines can connect
@@ -180,8 +182,18 @@ Settings are stored in:
 History database:
 - macOS: `~/Library/Application Support/com.comfyrecipes.Comfy Recipes/history.db`
 
-Result images:
+Result images and videos:
 - macOS: `~/Library/Application Support/com.comfyrecipes.Comfy Recipes/images/`
+
+## Video face swap (Face only)
+
+1. On the Face Swap screen, choose **Face only** mode and set the target to **Video (≤10s)**.
+2. Pick a source face photo and a target clip (`mp4`, `mov`, or `m4v`, max **10 seconds**).
+3. Adjust **Processing FPS** (default **12**): higher looks smoother but sends more frames to Hades (~3 seconds of GPU time per frame for ReActor-only).
+4. Press **Go**. Progress shows **Frame N / M**, then **Encoding video…**
+5. Save the result MP4 from the result screen.
+
+Video mode does not use Face + hair (SDXL per frame would be too slow for clips). No extra ComfyUI nodes are required beyond the existing ReActor setup.
 
 ## Troubleshooting
 
@@ -193,6 +205,10 @@ Result images:
 ### "Missing nodes: ReActorFaceSwap"
 - Follow the ReActor installation steps above
 - Restart ComfyUI after installing
+
+### Video errors ("ffmpeg not found" or duration)
+- Install ffmpeg: `brew install ffmpeg`
+- Clips longer than 10 seconds are rejected at pick time; trim in Photos or QuickTime first
 
 ### Face swap results look bad
 - Try adjusting the "Face Detail" slider (higher = more enhancement)

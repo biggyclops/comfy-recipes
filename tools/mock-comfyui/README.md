@@ -31,6 +31,9 @@ Only Face only nodes available. Use this to test that the app correctly:
 - Shows what's missing
 - Keeps "Face only" working
 
+### Video face swap (v0.3+)
+Video mode queues one ReActor prompt per extracted frame. The mock server returns a PNG for each prompt, so you can exercise the full UI (frame progress, encode step requires **ffmpeg** on the Mac) without a GPU.
+
 ## Endpoints
 
 - `GET /system_stats` - Returns mock GPU info (RTX 3060, 12GB VRAM)
