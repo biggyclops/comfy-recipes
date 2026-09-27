@@ -4,9 +4,10 @@ A Mac desktop app for running ComfyUI face-swap workflows without touching nodes
 
 ## Features
 
-- **Face Swap**: Swap a face from one photo onto another using ReActor
+- **Face Swap (Face only)**: Swap a face from one photo onto another using ReActor (fast, ~3 seconds)
+- **Face Swap (Face + hair)**: Replace the whole head including hair, keeping the target's body, pose, and background (SDXL + IPAdapter, ~30-60 seconds)
 - **Simple UI**: No node graphs - just pick photos and adjust a few sliders
-- **History**: Last 50 results saved locally with settings, so you can repeat good results
+- **History**: Last 50 results saved locally with settings and mode, so you can repeat good results
 - **Privacy**: Everything stays on your home network - no accounts, telemetry, or cloud services
 
 ## Screenshots
@@ -64,6 +65,39 @@ Restart ComfyUI after installation.
 
 Download from [ReActor releases](https://github.com/Gourieff/ComfyUI-ReActor) or HuggingFace.
 Place in `ComfyUI/models/facerestore_models/`
+
+## Face + hair Setup on Hades
+
+The "Face + hair" mode requires additional custom nodes and models beyond the basic Face only setup.
+
+### Required Custom Nodes
+
+| Repository | Install Command |
+|------------|-----------------|
+| [ComfyUI_IPAdapter_plus](https://github.com/cubiq/ComfyUI_IPAdapter_plus) | `cd ComfyUI/custom_nodes && git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus` |
+| [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) | `cd ComfyUI/custom_nodes && git clone https://github.com/ltdrdata/ComfyUI-Impact-Pack && cd ComfyUI-Impact-Pack && pip install -r requirements.txt` |
+
+Restart ComfyUI after installing custom nodes.
+
+### Required Models
+
+| Model File | Folder | Download Link |
+|------------|--------|---------------|
+| `sd_xl_base_1.0.safetensors` | `ComfyUI/models/checkpoints/` | [HuggingFace - stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/blob/main/sd_xl_base_1.0.safetensors) |
+| `sdxl_vae.safetensors` | `ComfyUI/models/vae/` | [HuggingFace - stabilityai/sdxl-vae](https://huggingface.co/stabilityai/sdxl-vae/blob/main/sdxl_vae.safetensors) |
+| `ip-adapter-faceid-plusv2_sdxl.bin` | `ComfyUI/models/ipadapter/` | [HuggingFace - h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID/blob/main/ip-adapter-faceid-plusv2_sdxl.bin) |
+| `ip-adapter-faceid-plusv2_sdxl_lora.safetensors` | `ComfyUI/models/loras/` | [HuggingFace - h94/IP-Adapter-FaceID](https://huggingface.co/h94/IP-Adapter-FaceID/blob/main/ip-adapter-faceid-plusv2_sdxl_lora.safetensors) |
+
+### Summary
+
+Face + hair uses this pipeline:
+1. Segment the target's head (face + hair + ears) using PersonMaskGenerator from Impact Pack
+2. Grow and feather the mask for smooth blending
+3. Inpaint the masked region with SDXL, guided by the source face via IPAdapter FaceID Plus V2
+4. Run ReActor + CodeFormer on top to lock in facial identity
+5. Composite the result back onto the original target
+
+This is tuned for RTX 3060 12GB: SDXL at ~1024px, fp16, 25 steps. Expect 30-60 seconds per image.
 
 ## Installation
 

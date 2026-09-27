@@ -100,6 +100,10 @@ pub struct HealthCheck {
     pub vram_free_gb: Option<f64>,
     pub comfyui_version: Option<String>,
     pub missing_nodes: Vec<String>,
+    pub missing_face_hair_nodes: Vec<String>,
+    pub missing_face_hair_models: Vec<String>,
+    pub face_hair_available: bool,
+    pub face_hair_unavailable_reason: Option<String>,
     pub error: Option<String>,
 }
 
@@ -180,6 +184,10 @@ impl ComfyClient {
             vram_free_gb: None,
             comfyui_version: None,
             missing_nodes: Vec::new(),
+            missing_face_hair_nodes: Vec::new(),
+            missing_face_hair_models: Vec::new(),
+            face_hair_available: false,
+            face_hair_unavailable_reason: None,
             error: None,
         };
 
@@ -212,6 +220,134 @@ impl ComfyClient {
         }
 
         health
+    }
+
+    pub async fn health_check_extended(
+        &self, 
+        required_nodes: &[&str],
+        face_hair_nodes: &[&str],
+        face_hair_models: &[(&str, &str)],
+    ) -> HealthCheck {
+        let mut health = self.health_check(required_nodes).await;
+        
+        if !health.reachable {
+            return health;
+        }
+
+        match self.check_nodes(face_hair_nodes).await {
+            Ok(missing) => {
+                health.missing_face_hair_nodes = missing;
+            }
+            Err(e) => {
+                health.face_hair_unavailable_reason = Some(format!("Cannot check nodes: {}", e));
+                return health;
+            }
+        }
+
+        match self.check_models(face_hair_models).await {
+            Ok(missing) => {
+                health.missing_face_hair_models = missing;
+            }
+            Err(e) => {
+                health.face_hair_unavailable_reason = Some(format!("Cannot check models: {}", e));
+                return health;
+            }
+        }
+
+        if health.missing_face_hair_nodes.is_empty() && health.missing_face_hair_models.is_empty() {
+            health.face_hair_available = true;
+        } else {
+            let mut reasons = Vec::new();
+            if !health.missing_face_hair_nodes.is_empty() {
+                reasons.push(format!("Missing nodes: {}", health.missing_face_hair_nodes.join(", ")));
+            }
+            if !health.missing_face_hair_models.is_empty() {
+                reasons.push(format!("Missing models: {}", health.missing_face_hair_models.join(", ")));
+            }
+            health.face_hair_unavailable_reason = Some(reasons.join("; "));
+        }
+
+        health
+    }
+
+    pub async fn check_models(&self, required_models: &[(&str, &str)]) -> Result<Vec<String>, ComfyError> {
+        let info = self.object_info().await?;
+        let mut missing = Vec::new();
+
+        for (folder, filename) in required_models {
+            let found = match *folder {
+                "checkpoints" => self.check_model_in_node(&info, "CheckpointLoaderSimple", "ckpt_name", filename),
+                "vae" => self.check_model_in_node(&info, "VAELoader", "vae_name", filename),
+                "loras" => self.check_model_in_node(&info, "LoraLoader", "lora_name", filename),
+                "ipadapter" => {
+                    self.check_model_in_node(&info, "IPAdapterModelLoader", "ipadapter_file", filename)
+                        || self.check_unified_loader(&info, filename)
+                }
+                "insightface" => true,
+                "facerestore_models" => self.check_reactor_model(&info, filename),
+                _ => true,
+            };
+            
+            if !found {
+                missing.push(filename.to_string());
+            }
+        }
+
+        Ok(missing)
+    }
+
+    fn check_model_in_node(
+        &self, 
+        info: &HashMap<String, serde_json::Value>, 
+        node_name: &str, 
+        input_name: &str,
+        filename: &str
+    ) -> bool {
+        if let Some(node) = info.get(node_name) {
+            if let Some(inputs) = node.get("input").and_then(|i| i.get("required")) {
+                if let Some(input) = inputs.get(input_name) {
+                    if let Some(options) = input.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()) {
+                        return options.iter().any(|v| {
+                            v.as_str().map(|s| s == filename).unwrap_or(false)
+                        });
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn check_unified_loader(&self, info: &HashMap<String, serde_json::Value>, filename: &str) -> bool {
+        if let Some(node) = info.get("IPAdapterUnifiedLoader") {
+            if let Some(inputs) = node.get("input").and_then(|i| i.get("required")) {
+                if let Some(preset) = inputs.get("preset") {
+                    if let Some(options) = preset.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()) {
+                        let has_faceid = options.iter().any(|v| {
+                            v.as_str().map(|s| s.contains("FACEID")).unwrap_or(false)
+                        });
+                        if has_faceid && filename.contains("faceid") {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn check_reactor_model(&self, info: &HashMap<String, serde_json::Value>, filename: &str) -> bool {
+        if let Some(node) = info.get("ReActorFaceSwap") {
+            if let Some(inputs) = node.get("input").and_then(|i| i.get("required")) {
+                if let Some(model) = inputs.get("face_restore_model") {
+                    if let Some(options) = model.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()) {
+                        return options.iter().any(|v| {
+                            v.as_str().map(|s| s == filename).unwrap_or(false)
+                        });
+                    }
+                }
+            }
+        }
+        false
     }
 
     pub async fn upload_image(&self, image_data: &[u8], filename: &str) -> Result<UploadResult, ComfyError> {
