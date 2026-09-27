@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 // @ts-ignore - Plugin types may not be available at build time
 import { save, open } from "@tauri-apps/plugin-dialog";
@@ -40,12 +40,29 @@ interface HistoryEntry {
   settings_json: string;
   prompt_id: string | null;
   swap_mode: string | null;
+  media_type: string | null;
+  result_video_path: string | null;
+  target_video_path: string | null;
 }
 
 interface RunResult {
   history_id: number;
   result_image_base64: string;
   prompt_id: string;
+}
+
+interface VideoRunResult {
+  history_id: number;
+  result_video_path: string;
+  result_poster_base64: string;
+  prompt_id: string;
+}
+
+interface VideoProbe {
+  duration_secs: number;
+  width: number;
+  height: number;
+  fps: number;
 }
 
 interface ProgressUpdate {
@@ -60,7 +77,10 @@ let settings: Settings = { comfyui_address: "http://hades:8188" };
 let healthStatus: HealthCheck | null = null;
 let sourceImageBase64: string | null = null;
 let targetImageBase64: string | null = null;
+let targetVideoPath: string | null = null;
+let targetType: "photo" | "video" = "photo";
 let resultImageBase64: string | null = null;
+let resultVideoPath: string | null = null;
 let isProcessing = false;
 let currentSwapMode: "face_only" | "face_hair" = "face_only";
 
@@ -106,12 +126,12 @@ async function saveSettings() {
 async function testConnection() {
   const btn = document.getElementById("test-connection-btn") as HTMLButtonElement;
   const statusList = document.getElementById("connection-status");
-  
+
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<span class="loading-spinner"></span> Testing...';
   }
-  
+
   if (statusList) {
     statusList.innerHTML = "";
   }
@@ -192,7 +212,7 @@ function renderConnectionStatus() {
     } else {
       html += `
         <li class="status-item">
-          <span class="status-icon status-warning">!</span>
+          <span class="status-icon status-error">!</span>
           <span>Face + hair: Not available</span>
         </li>
       `;
@@ -227,6 +247,7 @@ function renderConnectionStatus() {
   }
 
   updateFaceHairAvailability();
+  updateTargetTypeVisibility();
 }
 
 function updateFaceHairAvailability() {
@@ -245,7 +266,9 @@ function updateFaceHairAvailability() {
     faceHairLabel.classList.add("disabled");
     if (currentSwapMode === "face_hair") {
       currentSwapMode = "face_only";
-      const faceOnlyRadio = document.querySelector('input[name="swap-mode"][value="face_only"]') as HTMLInputElement;
+      const faceOnlyRadio = document.querySelector(
+        'input[name="swap-mode"][value="face_only"]'
+      ) as HTMLInputElement;
       if (faceOnlyRadio) faceOnlyRadio.checked = true;
       updateFaceHairOptionsVisibility();
     }
@@ -270,11 +293,57 @@ function updateFaceHairOptionsVisibility() {
   }
 }
 
+function updateTargetTypeVisibility() {
+  const targetTypeGroup = document.getElementById("target-type-group");
+  const videoOptions = document.getElementById("video-options");
+  const isFaceOnly = currentSwapMode === "face_only";
+
+  if (targetTypeGroup) {
+    targetTypeGroup.classList.toggle("hidden", !isFaceOnly);
+  }
+  if (videoOptions) {
+    videoOptions.classList.toggle("hidden", !isFaceOnly || targetType !== "video");
+  }
+  if (!isFaceOnly && targetType === "video") {
+    targetType = "photo";
+    targetVideoPath = null;
+    targetImageBase64 = null;
+    const photoRadio = document.querySelector(
+      'input[name="target-type"][value="photo"]'
+    ) as HTMLInputElement;
+    if (photoRadio) photoRadio.checked = true;
+    resetTargetDropzone();
+  }
+  updateGoButton();
+}
+
+function resetTargetDropzone() {
+  const dropzone = document.getElementById("dropzone-target");
+  const hint = document.getElementById("dropzone-target-hint");
+  const probeInfo = document.getElementById("video-probe-info");
+  if (dropzone) {
+    dropzone.classList.remove("has-image");
+    dropzone.innerHTML = `
+      <div class="dropzone-label">
+        <div class="icon">${targetType === "video" ? "🎬" : "🖼️"}</div>
+        <div id="dropzone-target-hint">Click to select ${targetType === "video" ? "video" : "image"}</div>
+      </div>
+    `;
+  }
+  if (hint && !dropzone) {
+    hint.textContent = `Click to select ${targetType === "video" ? "video" : "image"}`;
+  }
+  if (probeInfo) {
+    probeInfo.classList.add("hidden");
+    probeInfo.textContent = "";
+  }
+}
+
 async function loadRecipes() {
   try {
     const recipes = await invoke<Recipe[]>("get_recipes");
     const grid = document.getElementById("recipe-grid");
-    
+
     if (grid) {
       grid.innerHTML = recipes
         .map(
@@ -301,6 +370,13 @@ async function loadRecipes() {
   }
 }
 
+function showResultView(isVideo: boolean) {
+  const imageSection = document.getElementById("result-image-section");
+  const videoSection = document.getElementById("result-video-section");
+  if (imageSection) imageSection.classList.toggle("hidden", isVideo);
+  if (videoSection) videoSection.classList.toggle("hidden", !isVideo);
+}
+
 async function loadHistory() {
   try {
     const history = await invoke<HistoryEntry[]>("get_history", { limit: 10 });
@@ -314,7 +390,12 @@ async function loadHistory() {
               const base64 = await invoke<string>("read_image_file", {
                 path: entry.result_image_path,
               });
-              const modeBadge = entry.swap_mode === "face_hair" ? "F+H" : "F";
+              const isVideo = entry.media_type === "video";
+              const modeBadge = isVideo
+                ? "VID"
+                : entry.swap_mode === "face_hair"
+                  ? "F+H"
+                  : "F";
               return `
                 <div class="history-thumb" data-id="${entry.id}">
                   <img src="data:image/png;base64,${base64}" alt="Result">
@@ -346,8 +427,26 @@ async function loadHistory() {
 async function loadHistoryEntry(id: number) {
   try {
     const entry = await invoke<HistoryEntry | null>("get_history_entry", { id });
-    
-    if (entry && entry.result_image_path && entry.target_image_path) {
+
+    if (!entry) return;
+
+    if (entry.media_type === "video" && entry.result_video_path) {
+      resultVideoPath = entry.result_video_path;
+      resultImageBase64 = entry.result_image_path
+        ? await invoke<string>("read_image_file", { path: entry.result_image_path })
+        : null;
+
+      showResultView(true);
+      const videoEl = document.getElementById("result-video") as HTMLVideoElement;
+      if (videoEl) {
+        videoEl.src = convertFileSrc(resultVideoPath);
+      }
+      showScreen("result");
+      return;
+    }
+
+    if (entry.result_image_path && entry.target_image_path) {
+      resultVideoPath = null;
       resultImageBase64 = await invoke<string>("read_image_file", {
         path: entry.result_image_path,
       });
@@ -355,6 +454,7 @@ async function loadHistoryEntry(id: number) {
         path: entry.target_image_path,
       });
 
+      showResultView(false);
       const resultImg = document.getElementById("result-after") as HTMLImageElement;
       const beforeImg = document.getElementById("result-before") as HTMLImageElement;
 
@@ -378,11 +478,12 @@ async function selectImage(dropzoneId: string, type: "source" | "target") {
     if (selected) {
       const data = await readFile(selected);
       const base64 = btoa(String.fromCharCode(...data));
-      
+
       if (type === "source") {
         sourceImageBase64 = base64;
       } else {
         targetImageBase64 = base64;
+        targetVideoPath = null;
       }
 
       const dropzone = document.getElementById(dropzoneId);
@@ -398,15 +499,62 @@ async function selectImage(dropzoneId: string, type: "source" | "target") {
   }
 }
 
+async function selectTargetVideo() {
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [
+        { name: "Video", extensions: ["mp4", "mov", "m4v"] },
+      ],
+    });
+
+    if (!selected) return;
+
+    const probe = await invoke<VideoProbe>("probe_video_file", {
+      path: selected,
+      maxDurationSecs: 10,
+    });
+
+    targetVideoPath = selected;
+    targetImageBase64 = null;
+
+    const dropzone = document.getElementById("dropzone-target");
+    const probeInfo = document.getElementById("video-probe-info");
+    if (dropzone) {
+      dropzone.classList.add("has-image");
+      dropzone.innerHTML = `
+        <div class="dropzone-label">
+          <div class="icon">🎬</div>
+          <div>${selected.split(/[/\\]/).pop()}</div>
+        </div>
+      `;
+    }
+    if (probeInfo) {
+      probeInfo.classList.remove("hidden");
+      probeInfo.textContent = `${probe.duration_secs.toFixed(1)}s · ${probe.width}×${probe.height} · ${probe.fps.toFixed(1)} fps native`;
+    }
+
+    updateGoButton();
+  } catch (e) {
+    showError(`${e}`);
+    targetVideoPath = null;
+    updateGoButton();
+  }
+}
+
 function updateGoButton() {
   const btn = document.getElementById("go-btn") as HTMLButtonElement;
   if (btn) {
-    btn.disabled = !sourceImageBase64 || !targetImageBase64 || isProcessing;
+    const hasTarget =
+      targetType === "video" ? !!targetVideoPath : !!targetImageBase64;
+    btn.disabled = !sourceImageBase64 || !hasTarget || isProcessing;
   }
 }
 
 async function runFaceSwap() {
-  if (!sourceImageBase64 || !targetImageBase64 || isProcessing) return;
+  const hasTarget =
+    targetType === "video" ? !!targetVideoPath : !!targetImageBase64;
+  if (!sourceImageBase64 || !hasTarget || isProcessing) return;
 
   isProcessing = true;
   updateGoButton();
@@ -428,6 +576,35 @@ async function runFaceSwap() {
   const faceIndex = (document.getElementById("select-face") as HTMLSelectElement)?.value || "0";
 
   try {
+    if (targetType === "video" && targetVideoPath) {
+      const processingFps = parseInt(
+        (document.getElementById("slider-video-fps") as HTMLInputElement)?.value || "12"
+      );
+
+      const result = await invoke<VideoRunResult>("run_video_face_swap", {
+        sourceImageBase64,
+        targetVideoPath,
+        faceRestoreVisibility: restoreVisibility,
+        codeformerWeight,
+        inputFacesIndex: faceIndex,
+        maxDurationSecs: 10,
+        processingFps,
+      });
+
+      resultVideoPath = result.result_video_path;
+      resultImageBase64 = result.result_poster_base64;
+
+      showResultView(true);
+      const videoEl = document.getElementById("result-video") as HTMLVideoElement;
+      if (videoEl) {
+        videoEl.src = convertFileSrc(result.result_video_path);
+      }
+
+      showScreen("result");
+      await loadHistory();
+      return;
+    }
+
     let result: RunResult;
 
     if (currentSwapMode === "face_hair") {
@@ -457,8 +634,10 @@ async function runFaceSwap() {
       });
     }
 
+    resultVideoPath = null;
     resultImageBase64 = result.result_image_base64;
 
+    showResultView(false);
     const resultImg = document.getElementById("result-after") as HTMLImageElement;
     const beforeImg = document.getElementById("result-before") as HTMLImageElement;
 
@@ -477,6 +656,25 @@ async function runFaceSwap() {
 }
 
 async function saveResult() {
+  if (resultVideoPath) {
+    try {
+      const path = await save({
+        filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
+        defaultPath: "face_swap_result.mp4",
+      });
+
+      if (path) {
+        await invoke("copy_file_to_path", {
+          sourcePath: resultVideoPath,
+          destPath: path,
+        });
+      }
+    } catch (e) {
+      showError(`Failed to save: ${e}`);
+    }
+    return;
+  }
+
   if (!resultImageBase64) return;
 
   try {
@@ -496,13 +694,16 @@ async function saveResult() {
   }
 }
 
-function setupSlider(sliderId: string, valueId: string) {
+function setupSlider(sliderId: string, valueId: string, decimals = 2) {
   const slider = document.getElementById(sliderId) as HTMLInputElement;
   const valueEl = document.getElementById(valueId);
 
   if (slider && valueEl) {
     slider.addEventListener("input", () => {
-      valueEl.textContent = parseFloat(slider.value).toFixed(2);
+      valueEl.textContent =
+        decimals === 0
+          ? parseInt(slider.value, 10).toString()
+          : parseFloat(slider.value).toFixed(decimals);
     });
   }
 }
@@ -511,20 +712,27 @@ function setupEventListeners() {
   listen<ProgressUpdate>("progress", (event) => {
     const progressFill = document.getElementById("progress-fill");
     const progressText = document.getElementById("progress-text");
+    const { stage, value, max, percent } = event.payload;
 
     if (progressFill) {
-      progressFill.style.width = `${event.payload.percent}%`;
+      progressFill.style.width = `${percent}%`;
     }
     if (progressText) {
-      const stages: Record<string, string> = {
-        uploading: "Uploading images...",
-        queued: "Queued, waiting...",
-        executing: "Processing...",
-        sampling: "Generating...",
-        fetching: "Downloading result...",
-        complete: "Complete!",
-      };
-      progressText.textContent = stages[event.payload.stage] || event.payload.stage;
+      if (stage === "frame") {
+        progressText.textContent = `Frame ${value} / ${max}`;
+      } else {
+        const stages: Record<string, string> = {
+          extracting: "Extracting frames...",
+          uploading: "Uploading source face...",
+          encoding: "Encoding video...",
+          queued: "Queued, waiting...",
+          executing: "Processing...",
+          sampling: "Generating...",
+          fetching: "Downloading result...",
+          complete: "Complete!",
+        };
+        progressText.textContent = stages[stage] || stage;
+      }
     }
   });
 
@@ -545,7 +753,11 @@ function setupEventListeners() {
   });
 
   document.getElementById("dropzone-target")?.addEventListener("click", () => {
-    selectImage("dropzone-target", "target");
+    if (targetType === "video") {
+      selectTargetVideo();
+    } else {
+      selectImage("dropzone-target", "target");
+    }
   });
 
   document.getElementById("go-btn")?.addEventListener("click", runFaceSwap);
@@ -571,12 +783,25 @@ function setupEventListeners() {
   setupSlider("slider-restore", "value-restore");
   setupSlider("slider-codeformer", "value-codeformer");
   setupSlider("slider-blend", "value-blend");
+  setupSlider("slider-video-fps", "value-video-fps", 0);
 
   document.querySelectorAll('input[name="swap-mode"]').forEach((radio) => {
     radio.addEventListener("change", (e) => {
       const target = e.target as HTMLInputElement;
       currentSwapMode = target.value as "face_only" | "face_hair";
       updateFaceHairOptionsVisibility();
+      updateTargetTypeVisibility();
+    });
+  });
+
+  document.querySelectorAll('input[name="target-type"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => {
+      const target = e.target as HTMLInputElement;
+      targetType = target.value as "photo" | "video";
+      targetImageBase64 = null;
+      targetVideoPath = null;
+      resetTargetDropzone();
+      updateTargetTypeVisibility();
     });
   });
 
@@ -593,6 +818,7 @@ async function init() {
   await loadRecipes();
   await loadHistory();
   setupEventListeners();
+  updateTargetTypeVisibility();
   showScreen("home");
 }
 

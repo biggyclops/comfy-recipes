@@ -92,12 +92,33 @@
 
               <div>
                 <label class="form-label">Put onto (target)</label>
+                <div id="target-type-group" class="target-type-group">
+                  <label class="mode-option">
+                    <input type="radio" name="target-type" value="photo" checked />
+                    <span class="mode-label">Photo</span>
+                  </label>
+                  <label class="mode-option">
+                    <input type="radio" name="target-type" value="video" />
+                    <span class="mode-label">Video (≤10s, face only)</span>
+                  </label>
+                </div>
                 <div id="dropzone-target" class="image-dropzone">
                   <div class="dropzone-label">
                     <div class="icon">🖼️</div>
-                    <div>Click to select image</div>
+                    <div id="dropzone-target-hint">Click to select image</div>
                   </div>
                 </div>
+                <div id="video-probe-info" class="video-probe-info hidden"></div>
+              </div>
+            </div>
+
+            <div id="video-options" class="video-options hidden">
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span class="slider-label">Processing FPS (quality vs speed)</span>
+                  <span id="value-video-fps" class="slider-value">12</span>
+                </div>
+                <input type="range" id="slider-video-fps" class="slider" min="4" max="24" step="1" value="12" />
               </div>
             </div>
 
@@ -178,7 +199,7 @@
           <div class="card">
             <h2 class="card-title">Result</h2>
 
-            <div class="result-comparison">
+            <div id="result-image-section" class="result-comparison">
               <div class="result-image-container">
                 <h4>Before</h4>
                 <img id="result-before" class="result-image" src="" alt="Before" />
@@ -187,6 +208,10 @@
                 <h4>After</h4>
                 <img id="result-after" class="result-image" src="" alt="After" />
               </div>
+            </div>
+            <div id="result-video-section" class="result-video-section hidden">
+              <h4>Result video</h4>
+              <video id="result-video" class="result-video" controls playsinline></video>
             </div>
 
             <div class="result-actions">
